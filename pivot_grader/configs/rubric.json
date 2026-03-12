@@ -1,0 +1,60 @@
+{
+  "assignment": "Homework 3 - Pivot Tables",
+  "max_score": 10,
+  "questions": [
+    {
+      "id": "Q1", "sheet_row": 7, "points": 1, "type": "pivot_numeric",
+      "sort_required": true, "explanation_required": false,
+      "expected_top": {"label": "Food & Drink", "value": 1707732.18}
+    },
+    {
+      "id": "Q2", "sheet_row": 8, "points": 1, "type": "pivot_numeric",
+      "sort_required": true, "explanation_required": false,
+      "expected_top": {"label": "Sweetums Industries", "value": 630522.66}
+    },
+    {
+      "id": "Q3", "sheet_row": 9, "points": 1, "type": "pivot_numeric_filtered",
+      "sort_required": false, "explanation_required": false,
+      "filter_check": "vendor_name=multiple_items",
+      "expected_top": {"label": "Sweetums Soda", "value": 5604}
+    },
+    {
+      "id": "Q4", "sheet_row": 10, "points": 1, "type": "pivot_formula",
+      "sort_required": false, "explanation_required": true,
+      "explanation_rubric": "Student must recognize multiple line items per order and explain that average is computed as average of per-order totals, not average of all rows."
+    },
+    {
+      "id": "Q5", "sheet_row": 11, "points": 1, "type": "pivot_numeric_filtered",
+      "sort_required": false, "explanation_required": false,
+      "filter_check": "month in [Jun, Jul, Aug]",
+      "expected_top": {"label": "Food & Drink", "value": 16160}
+    },
+    {
+      "id": "Q6", "sheet_row": 12, "points": 1, "type": "pivot_percent",
+      "sort_required": false, "explanation_required": true,
+      "explanation_rubric": "Must identify Zoo Penguin Plush (~74% of Lil Sebastian sales) as most concentrated product. Must note no other vendor-product has this dominance."
+    },
+    {
+      "id": "Q7", "sheet_row": 13, "points": 1, "type": "pivot_crosstab_percent",
+      "sort_required": false, "explanation_required": true,
+      "explanation_rubric": "Must identify Food & Drink as most concentrated (one audience ~90%, another ~0%) and Home & Lifestyle as most evenly distributed (all 26-41%)."
+    },
+    {
+      "id": "Q8", "sheet_row": 14, "points": 1, "type": "pivot_crosstab_filtered",
+      "sort_required": false, "explanation_required": false,
+      "expected_columns": 4,
+      "note": "Customers ordering ONLY in Nov and Dec. Correct pivot: customer_id rows x month cols (Nov+Dec only), ~16109 rows x 4 cols."
+    },
+    {
+      "id": "Q9", "sheet_row": 15, "points": 1, "type": "pivot_promo_analysis",
+      "sort_required": false, "explanation_required": true,
+      "explanation_rubric": "Must identify customers using both Honey and No Promo Code (esp. customers 4, 12, 27). Should note 12 and 27 have more non-promo transactions, indicating they don't rely on the coupon."
+    },
+    {
+      "id": "Q10", "sheet_row": 16, "points": 1, "type": "pivot_percent_filtered",
+      "sort_required": false, "explanation_required": false,
+      "filter_check": "month=multiple_items",
+      "standout_value": {"label": "Rent-A-Swag Inc.", "honey_pct": 0.207}
+    }
+  ]
+}
