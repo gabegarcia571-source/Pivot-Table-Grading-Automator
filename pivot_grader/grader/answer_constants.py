@@ -21,3 +21,7 @@ HOLIDAY_ONLY_CUSTOMERS: frozenset[int] = frozenset({
     20, 37, 122, 124, 151, 171, 255, 331, 378, 383,
     # ... paste the remaining ~2,477 IDs from the answer key here ...
 })
+
+# Safety flag for graders: False means this answer set is known incomplete and
+# must not be used for automatic grading.
+HOLIDAY_ONLY_CUSTOMERS_COMPLETE = False

@@ -1,0 +1,15 @@
+student_id=azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024
+status=needs_review
+total_score=2.0
+grade_file=/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024_grade.xlsx
+needs_review_questions=Q10,Q4,Q6,Q7,Q8,Q9
+Q1: 0.7 | Incorrect sort
+Q10: None | NEEDS_REVIEW: Q10 month-filter validation is incomplete
+Q2: 0.7 | Incorrect sort
+Q3: 0.3 | Incorrect value
+Q4: None | NEEDS_REVIEW: explanation grading unavailable (LLM/API)
+Q5: 0.3 | Incorrect value
+Q6: None | NEEDS_REVIEW: explanation grading unavailable (LLM/API)
+Q7: None | NEEDS_REVIEW: explanation grading unavailable (LLM/API)
+Q8: None | NEEDS_REVIEW: Q8 answer set is incomplete
+Q9: None | NEEDS_REVIEW: explanation grading unavailable (LLM/API)

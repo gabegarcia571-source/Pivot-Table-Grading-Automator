@@ -40,8 +40,9 @@ def _normalize_for_compare(df: pd.DataFrame) -> pd.DataFrame:
 def compare_pivot_values(
     student_df: pd.DataFrame,
     answer_df: pd.DataFrame,
+    numeric_tolerance: float = 1e-2,
 ) -> dict[str, Any]:
-    """Compare student and answer pivots by label + value using exact equality."""
+    """Compare student and answer pivots by label + value with tolerance."""
     student_norm = _normalize_for_compare(student_df)
     answer_norm = _normalize_for_compare(answer_df)
 
@@ -70,7 +71,7 @@ def compare_pivot_values(
             mismatches.append({"label": label, "expected": expected, "actual": None})
             continue
 
-        if float(actual) == float(expected):
+        if abs(float(actual) - float(expected)) <= numeric_tolerance:
             matches += 1
         else:
             mismatches.append({"label": label, "expected": float(expected), "actual": float(actual)})
@@ -415,20 +416,28 @@ def check_q8_highlight(
     """
     from pathlib import Path as _Path
     import openpyxl as _openpyxl
-    from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS
+    from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS, HOLIDAY_ONLY_CUSTOMERS_COMPLETE
 
     notes: list[str] = []
+
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        return {
+            "match": False,
+            "missing_pivot": False,
+            "needs_review": True,
+            "notes": ["NEEDS_REVIEW: Q8 answer set is incomplete"],
+        }
 
     try:
         wb = _openpyxl.load_workbook(_Path(workbook_path), data_only=True)
     except Exception as exc:
-        notes.append(f"Could not open workbook for Q8 highlight detection: {exc}")
-        return {"match": False, "missing_pivot": False, "notes": notes}
+        notes.append("Missing highlight")
+        return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
 
     if sheet_name not in wb.sheetnames:
-        notes.append(f"Sheet '{sheet_name}' not found in workbook for Q8 highlight detection.")
+        notes.append("Missing highlight")
         wb.close()
-        return {"match": False, "missing_pivot": False, "notes": notes}
+        return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
 
     ws = wb[sheet_name]
     highlighted_ids: set[int] = set()
@@ -449,12 +458,8 @@ def check_q8_highlight(
     wb.close()
 
     if not highlighted_ids:
-        notes.append(
-            "No highlighted rows detected. "
-            "Students must highlight the customer IDs who order only in "
-            "November and December."
-        )
-        return {"match": False, "missing_pivot": True, "notes": notes}
+        notes.append("Missing highlight")
+        return {"match": False, "missing_pivot": True, "needs_review": False, "notes": notes}
 
     correct_set = HOLIDAY_ONLY_CUSTOMERS
     n_correct = max(1, len(correct_set))
@@ -464,23 +469,13 @@ def check_q8_highlight(
     error_rate = error_count / n_correct
 
     if error_rate == 0.0:
-        return {"match": True, "missing_pivot": False, "notes": notes}
+        return {"match": True, "missing_pivot": False, "needs_review": False, "notes": notes}
 
     if error_rate <= 0.05:
-        notes.append(
-            f"Highlighted IDs mostly correct "
-            f"({len(false_positives)} extra, {len(false_negatives)} missing out of "
-            f"{n_correct}). Within 5 % tolerance — full credit awarded."
-        )
-        return {"match": True, "missing_pivot": False, "notes": notes}
+        return {"match": True, "missing_pivot": False, "needs_review": False, "notes": notes}
 
-    notes.append(
-        f"Highlighted {len(highlighted_ids):,} customer ID(s); expected {n_correct:,}. "
-        f"{len(false_positives):,} incorrectly highlighted, "
-        f"{len(false_negatives):,} missed "
-        f"({error_rate:.1%} error rate — threshold is 5 %)."
-    )
-    return {"match": False, "missing_pivot": False, "notes": notes}
+    notes.append("Incorrect value")
+    return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,20 @@
 {
   "assignment": "Homework 3 - Pivot Tables",
   "max_score": 10,
+  "comment_style": {
+    "max_words_per_comment": 15,
+    "allowed_short_phrases": [
+      "Missing highlight",
+      "Incorrect value",
+      "Incorrect filter",
+      "Incorrect sort",
+      "Needs more detail",
+      "Should more directly address question",
+      "Answer inconsistent with analysis",
+      "Missing pivot table",
+      "Manual review needed"
+    ]
+  },
   "questions": [
     {
       "id": "Q1", "sheet_row": 7, "points": 1, "type": "pivot_numeric",

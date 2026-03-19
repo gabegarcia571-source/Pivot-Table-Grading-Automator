@@ -1,0 +1,15 @@
+student_id=bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb
+status=needs_review
+total_score=2.7
+grade_file=/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb_grade.xlsx
+needs_review_questions=Q10,Q8
+Q1: 0.7 | Incorrect sort
+Q10: None | NEEDS_REVIEW: Q10 month-filter validation is incomplete
+Q2: 0.0 | Incorrect sort; Incorrect value
+Q3: 0.3 | Incorrect value; Incorrect filter
+Q4: 0.7 | Needs more detail
+Q5: 1.0 | 
+Q6: 0.0 | Incorrect value; Needs more detail
+Q7: 0.0 | Incorrect value; Needs more detail
+Q8: None | NEEDS_REVIEW: Q8 answer set is incomplete
+Q9: 0.0 | Incorrect value; Needs more detail

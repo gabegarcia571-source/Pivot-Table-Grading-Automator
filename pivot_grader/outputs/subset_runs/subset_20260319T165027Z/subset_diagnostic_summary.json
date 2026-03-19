@@ -1,0 +1,121 @@
+{
+  "timestamp_utc": "2026-03-19T16:51:12.079694+00:00",
+  "files_tested": [
+    "asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM.xlsx",
+    "azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024.xlsx",
+    "bagleycaroline_1276050_18780889_Final_GryzzlSales.xlsx",
+    "barbankatherine_1287732_18778682_Homework 3 - Gryzzl Pivot Tables.xlsx",
+    "bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb.xlsx"
+  ],
+  "successful_ingestion": 5,
+  "failed_ingestion": 0,
+  "diagnostics": [
+    {
+      "filename": "asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM.xlsx",
+      "sheets_detected": 13,
+      "pivot_tables_detected": 10,
+      "ingestion_succeeded": true,
+      "error": null
+    },
+    {
+      "filename": "azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024.xlsx",
+      "sheets_detected": 13,
+      "pivot_tables_detected": 11,
+      "ingestion_succeeded": true,
+      "error": null
+    },
+    {
+      "filename": "bagleycaroline_1276050_18780889_Final_GryzzlSales.xlsx",
+      "sheets_detected": 13,
+      "pivot_tables_detected": 11,
+      "ingestion_succeeded": true,
+      "error": null
+    },
+    {
+      "filename": "barbankatherine_1287732_18778682_Homework 3 - Gryzzl Pivot Tables.xlsx",
+      "sheets_detected": 13,
+      "pivot_tables_detected": 11,
+      "ingestion_succeeded": true,
+      "error": null
+    },
+    {
+      "filename": "bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb.xlsx",
+      "sheets_detected": 13,
+      "pivot_tables_detected": 11,
+      "ingestion_succeeded": true,
+      "error": null
+    }
+  ],
+  "subset_run_dir": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z",
+  "grading_summary": {
+    "timestamp_utc": "2026-03-19T16:50:33.448530+00:00",
+    "assignment": "Homework 3 - Pivot Tables",
+    "max_score": 10,
+    "students": [
+      {
+        "student_id": "asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM",
+        "status": "needs_review",
+        "total_score": 2.7,
+        "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM_grade.xlsx",
+        "needs_review_questions": [
+          "Q10",
+          "Q4",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9"
+        ]
+      },
+      {
+        "student_id": "azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024",
+        "status": "needs_review",
+        "total_score": 2.0,
+        "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/azimipouralessio_1276652_18809839_Azimipour_GryzzlSales2024_grade.xlsx",
+        "needs_review_questions": [
+          "Q10",
+          "Q4",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9"
+        ]
+      },
+      {
+        "student_id": "bagleycaroline_1276050_18780889_Final_GryzzlSales",
+        "status": "needs_review",
+        "total_score": 2.7,
+        "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/bagleycaroline_1276050_18780889_Final_GryzzlSales_grade.xlsx",
+        "needs_review_questions": [
+          "Q10",
+          "Q8"
+        ]
+      },
+      {
+        "student_id": "barbankatherine_1287732_18778682_Homework 3 - Gryzzl Pivot Tables",
+        "status": "needs_review",
+        "total_score": 2.7,
+        "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/barbankatherine_1287732_18778682_Homework 3 - Gryzzl Pivot Tables_grade.xlsx",
+        "needs_review_questions": [
+          "Q10",
+          "Q4",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9"
+        ]
+      },
+      {
+        "student_id": "bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb",
+        "status": "needs_review",
+        "total_score": 2.7,
+        "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/subset_runs/subset_20260319T165027Z/outputs/grades/bautistapinedatere_1291030_18792748_GryzzlSales2024 TereBautista.xlsb_grade.xlsx",
+        "needs_review_questions": [
+          "Q10",
+          "Q8"
+        ]
+      }
+    ],
+    "success_count": 5,
+    "failure_count": 0
+  }
+}

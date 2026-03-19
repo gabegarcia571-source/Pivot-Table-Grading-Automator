@@ -1,0 +1,25 @@
+student_id=asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM
+status=needs_review
+total_score=0
+grade_file=outputs/grades/asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM_grade.xlsx
+needs_review_questions=Q1,Q10,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9
+WARN: Q1: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q2: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q3: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q4: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q5: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q6: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q7: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q8: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q9: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+WARN: Q10: no sheet matched confidently (best_score=0.0). Flagged for human review — grade manually.
+Q1: None | NEEDS_REVIEW: unmapped question
+Q10: None | NEEDS_REVIEW: unmapped question
+Q2: None | NEEDS_REVIEW: unmapped question
+Q3: None | NEEDS_REVIEW: unmapped question
+Q4: None | NEEDS_REVIEW: unmapped question
+Q5: None | NEEDS_REVIEW: unmapped question
+Q6: None | NEEDS_REVIEW: unmapped question
+Q7: None | NEEDS_REVIEW: unmapped question
+Q8: None | NEEDS_REVIEW: unmapped question
+Q9: None | NEEDS_REVIEW: unmapped question

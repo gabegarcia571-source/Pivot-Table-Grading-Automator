@@ -24,11 +24,13 @@ Return ONLY valid JSON, no other text:
 {{
   "deduct_explanation": <true if explanation is wrong, vague, or missing key logic>,
   "confidence": <float 0.0-1.0>,
-  "brief_reason": "<one sentence>"
+    "brief_reason": "<one short phrase>"
 }}
 
-Be strict. Vague answers that don't reference specific fields, values, or named
-entities from the data should be marked deduct_explanation: true.
+Use concise rubric-style comments only. Preferred phrases:
+- "Needs more detail"
+- "Should more directly address question"
+- "Answer inconsistent with analysis"
 """.strip()
 
 
@@ -44,8 +46,29 @@ def _fallback_bad_explanation(reason: str) -> dict[str, Any]:
     return {
         "deduct_explanation": True,
         "confidence": 0.0,
-        "brief_reason": reason,
+        "brief_reason": _short_explanation_comment(reason),
+        "needs_review": False,
     }
+
+
+def _fallback_needs_review(reason: str) -> dict[str, Any]:
+    return {
+        "deduct_explanation": False,
+        "confidence": 0.0,
+        "brief_reason": f"NEEDS_REVIEW: {reason}",
+        "needs_review": True,
+    }
+
+
+def _short_explanation_comment(reason: str) -> str:
+    low = (reason or "").strip().lower()
+    if "inconsistent" in low and "analysis" in low:
+        return "Answer inconsistent with analysis"
+    if "direct" in low and "question" in low:
+        return "Should more directly address question"
+    if "off-topic" in low:
+        return "Should more directly address question"
+    return "Needs more detail"
 
 
 def grade_explanation(question_id: str, student_text: str, rubric_text: str) -> dict[str, Any]:
@@ -56,7 +79,7 @@ def grade_explanation(question_id: str, student_text: str, rubric_text: str) -> 
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key or Anthropic is None:
-        return _fallback_bad_explanation("Anthropic API unavailable; explanation marked for deduction.")
+        return _fallback_needs_review("explanation grading unavailable (LLM/API)")
 
     prompt = EXPLANATION_PROMPT.format(
         question_id=question_id,
@@ -84,7 +107,10 @@ def grade_explanation(question_id: str, student_text: str, rubric_text: str) -> 
         return {
             "deduct_explanation": bool(payload.get("deduct_explanation", True)),
             "confidence": float(payload.get("confidence", 0.0)),
-            "brief_reason": str(payload.get("brief_reason", "No reason returned by model.")),
+            "brief_reason": _short_explanation_comment(
+                str(payload.get("brief_reason", "Needs more detail"))
+            ),
+            "needs_review": False,
         }
     except Exception as exc:  # noqa: BLE001
-        return _fallback_bad_explanation(f"LLM grading failed: {exc}")
+        return _fallback_needs_review(f"explanation grading failed ({exc})")

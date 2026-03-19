@@ -1,25 +1,76 @@
 from __future__ import annotations
 
 DEDUCTIONS = {
-    "missing_pivot": {"points": -1.0, "comment": "No pivot table submitted for this question."},
-    "no_sort": {"points": -0.3, "comment": "Table not sorted as required by the question."},
+    "missing_pivot": {"points": -1.0, "comment": "Missing pivot table"},
+    "no_sort": {"points": -0.3, "comment": "Incorrect sort"},
     "extra_columns": {
         "points": -0.3,
-        "comment": "Pivot table contains extra/unnecessary columns.",
+        "comment": "Extra columns",
     },
     "answer_not_highlighted": {
         "points": -0.5,
-        "comment": "Correct answer is present but not highlighted.",
+        "comment": "Missing highlight",
     },
     "wrong_values": {
         "points": -0.7,
-        "comment": "Incorrect columns or data values; correct answer not present. Partial credit awarded.",
+        "comment": "Incorrect value",
     },
     "bad_explanation": {
         "points": -0.3,
-        "comment": "Explanation is missing, incorrect, or inconsistent with the analysis.",
+        "comment": "Needs more detail",
     },
 }
+
+
+def _limit_words(text: str, max_words: int) -> str:
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words])
+
+
+def _normalize_comment(text: str) -> str:
+    low = text.strip().lower()
+    if not low:
+        return ""
+    if "highlight" in low:
+        return "Missing highlight"
+    if "filter" in low:
+        return "Incorrect filter"
+    if "sort" in low:
+        return "Incorrect sort"
+    if "inconsistent" in low and "analysis" in low:
+        return "Answer inconsistent with analysis"
+    if "directly address" in low or "off-topic" in low:
+        return "Should more directly address question"
+    if "explanation" in low:
+        return "Needs more detail"
+    if "manual review" in low:
+        return "Manual review needed"
+    if "pivot" in low and ("missing" in low or "no" in low):
+        return "Missing pivot table"
+    if "mismatch" in low or "expected" in low or "incorrect" in low or "value" in low:
+        return "Incorrect value"
+    return text.strip()
+
+
+def format_short_comments(comments: list[str], max_words: int = 15) -> str:
+    """Normalize comments into short rubric-style phrases.
+
+    Removes duplicates, keeps first-seen order, and joins with semicolons.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in comments:
+        norm = _normalize_comment(raw)
+        if not norm:
+            continue
+        norm = _limit_words(norm, max_words=max_words)
+        if norm in seen:
+            continue
+        seen.add(norm)
+        out.append(norm)
+    return "; ".join(out)
 
 
 def compute_question_score(
@@ -29,7 +80,7 @@ def compute_question_score(
     explanation_deduct: bool,
 ) -> tuple[float, list[str]]:
     if not has_pivot:
-        return 0.0, ["No pivot table submitted."]
+        return 0.0, [DEDUCTIONS["missing_pivot"]["comment"]]
 
     score = 1.0
     comments: list[str] = []

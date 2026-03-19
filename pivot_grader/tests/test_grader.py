@@ -71,6 +71,27 @@ def test_load_student_submission_shifted_pivot(tmp_path: Path) -> None:
     assert len(df) >= 1
 
 
+def test_load_student_submission_from_file_path(tmp_path: Path) -> None:
+    """load_student_submission should also accept a direct xlsx path."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Q1"
+    ws["A1"] = "category_name"
+    ws["B1"] = "Sum of total_product_price"
+    ws["A2"] = "Food & Drink"
+    ws["B2"] = 1_707_732.18
+
+    workbook_path = tmp_path / "student_file.xlsx"
+    wb.save(workbook_path)
+
+    result = load_student_submission(workbook_path)
+
+    assert result.error is None
+    assert result.student_id == "student_file"
+    assert result.workbook_path == workbook_path
+    assert "Q1" in result.sheets
+
+
 # ---------------------------------------------------------------------------
 # Q4 average-scan tests
 # ---------------------------------------------------------------------------
@@ -488,7 +509,7 @@ def test_check_q8_highlight_wrong_ids(tmp_path: Path) -> None:
     result = check_q8_highlight(path, sname)
     assert result["match"] is False
     assert result["missing_pivot"] is False
-    assert any("highlight" in n.lower() or "customer" in n.lower() for n in result["notes"])
+    assert "Incorrect value" in result["notes"]
 
 
 def test_check_q8_highlight_missing_sheet(tmp_path: Path) -> None:
@@ -501,7 +522,7 @@ def test_check_q8_highlight_missing_sheet(tmp_path: Path) -> None:
     wb.save(path)
     result = check_q8_highlight(path, "Q8")
     assert result["match"] is False
-    assert any("not found" in n.lower() or "sheet" in n.lower() for n in result["notes"])
+    assert "Missing highlight" in result["notes"]
 
 
 # ---------------------------------------------------------------------------
