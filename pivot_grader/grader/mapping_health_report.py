@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from grader.ingest import load_answer_key, load_student_submission
-from grader.run_grader import _match_sheets_to_questions
+from grader.sheet_matcher import match_sheets_to_questions
 
 
 QUESTION_IDS = [f"Q{i}" for i in range(1, 11)]
@@ -74,7 +74,7 @@ def build_mapping_health_report(
             continue
 
         warnings: list[str] = []
-        _, matched_names = _match_sheets_to_questions(
+        _, matched_names = match_sheets_to_questions(
             submission.sheets,
             answer_key,
             QUESTION_IDS,

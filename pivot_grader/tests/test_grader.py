@@ -8,17 +8,17 @@ from openpyxl import Workbook, load_workbook
 from grader.grade_writer import write_grades
 from grader.ingest import find_pivot_origin, load_student_submission
 from grader.pivot_checker import (
-    check_q3_filter,
-    check_q4_average,
-    check_q5_filter,
-    check_q8_highlight,
-    check_q10_filter,
     compare_pivot_values,
+    compare_pivot_values_subset,
     is_desc_sorted_within_groups,
     sheet_fingerprint,
     fingerprint_similarity,
 )
-from grader.scoring import compute_question_score
+from grader.questions.q3 import evaluate_q3_structure
+from grader.questions.q4 import check_q4_average
+from grader.questions.q5 import check_q5_filter
+from grader.questions.q8 import check_q8_highlight
+from grader.questions.q10 import check_q10_filter
 
 
 def test_find_pivot_origin_standard() -> None:
@@ -145,16 +145,75 @@ def test_compare_pivot_values_partial_credit() -> None:
     assert result["score_suggestion"] == 0.5
 
 
-def test_compute_question_score_with_deductions() -> None:
-    score, comments = compute_question_score(
-        has_pivot=True,
-        pivot_match=False,
-        structural_issues=["no_sort"],
-        explanation_deduct=True,
+def test_compare_pivot_values_subset_allows_additional_filtering() -> None:
+    """Q3-style filtered subset should pass when required labels are present and correct."""
+    student = pd.DataFrame({
+        "Row Labels": ["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush"],
+        "Value": [5604, 5312, 5279],
+    })
+    answer = pd.DataFrame({
+        "Row Labels": ["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush", "Waffle Ale"],
+        "Value": [5604, 5312, 5279, 5206],
+    })
+
+    result = compare_pivot_values_subset(
+        student,
+        answer,
+        required_labels=["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush"],
     )
 
-    assert score == 0.0
-    assert len(comments) == 3
+    assert result["match"] is True
+    assert result["mismatches"] == []
+    assert result["missing_required"] == []
+
+
+def test_compare_pivot_values_subset_requires_key_labels() -> None:
+    """Subset match should fail if one required top product is missing."""
+    student = pd.DataFrame({
+        "Row Labels": ["Sweetums Soda", "Sweetums Candy"],
+        "Value": [5604, 5312],
+    })
+    answer = pd.DataFrame({
+        "Row Labels": ["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush", "Waffle Ale"],
+        "Value": [5604, 5312, 5279, 5206],
+    })
+
+    result = compare_pivot_values_subset(
+        student,
+        answer,
+        required_labels=["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush"],
+    )
+
+    assert result["match"] is False
+    assert result["missing_required"] == ["Zoo Penguin Plush"]
+
+
+def test_compare_pivot_values_subset_can_ignore_q3_vendor_group_headers() -> None:
+    """Q3 value matching should ignore vendor group header rows when requested."""
+    student = pd.DataFrame({
+        "Row Labels": [
+            "Sweetums Industries",
+            "Sweetums Soda",
+            "Sweetums Candy",
+            "Lil' Sebastian Co.",
+            "Zoo Penguin Plush",
+        ],
+        "Value": [13566, 5604, 5312, 5279, 5279],
+    })
+    answer = pd.DataFrame({
+        "Row Labels": ["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush"],
+        "Value": [5604, 5312, 5279],
+    })
+
+    result = compare_pivot_values_subset(
+        student,
+        answer,
+        required_labels=["Sweetums Soda", "Sweetums Candy", "Zoo Penguin Plush"],
+        ignore_labels=["Sweetums Industries", "Lil' Sebastian Co."],
+    )
+
+    assert result["match"] is True
+    assert result["mismatches"] == []
 
 
 def test_write_grades(tmp_path: Path) -> None:
@@ -242,8 +301,8 @@ def test_check_q3_filter_not_applied() -> None:
         "vendor_name": _VENDOR_NAMES,
         "total": [1000, 2000, 1500, 800],
     })
-    result = check_q3_filter(df)
-    assert result["filter_ok"] is False
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is False
     assert len(result["found_vendors_in_rows"]) == 4
 
 
@@ -253,35 +312,57 @@ def test_check_q3_filter_applied() -> None:
         "product_name": ["Calzone", "Pizza", "Waffle"],
         "total": [500, 600, 700],
     })
-    result = check_q3_filter(df)
-    assert result["filter_ok"] is True
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is True
     assert result["found_vendors_in_rows"] == []
 
 
 def test_check_q3_filter_partial_vendors() -> None:
-    """Only two of the top-3 vendor names in first column → filter_ok=False.
-
-    The new logic requires exactly all three top vendors — Sweetums Industries,
-    JJ's Diner Goods, Lil' Sebastian Co. — and no others.
-    """
+    """Any vendor names in first column mean vendor split rows → filter_ok=False."""
     df = pd.DataFrame({
         "vendor_name": ["sweetums industries", "jj's diner goods"],
         "total": [1000, 2000],
     })
-    result = check_q3_filter(df)
-    assert result["filter_ok"] is False
-    assert len(result["missing_vendors"]) == 1  # lil' sebastian co. missing
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is False
+    assert set(result["found_vendors_in_rows"]) == {"sweetums industries", "jj's diner goods"}
 
 
 def test_check_q3_filter_correct_top3() -> None:
-    """Exactly the three top vendors in rows, no others → filter_ok=True."""
+    """Top-3 vendor row-label style is structurally invalid for Q3."""
     df = pd.DataFrame({
         "vendor_name": ["sweetums industries", "jj's diner goods", "lil' sebastian co."],
         "total": [1000, 2000, 800],
     })
-    result = check_q3_filter(df)
-    assert result["filter_ok"] is True
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is False
     assert result["extra_vendors"] == []
+    assert result["missing_vendors"] == []
+
+
+def test_evaluate_q3_structure_reports_style_and_marker_state() -> None:
+    df = pd.DataFrame({
+        "Row Labels": ["Sweetums Industries", "JJ's Diner Goods", "Lil' Sebastian Co."],
+        "Value": [1000, 2000, 800],
+    })
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is False
+    assert result["style"] == "row_label_vendor"
+    assert set(result["found_vendors_in_rows"]) == {
+        "sweetums industries",
+        "jj's diner goods",
+        "lil' sebastian co.",
+    }
+
+
+def test_check_q3_filter_handles_smart_apostrophes() -> None:
+    """Curly apostrophes should still normalize for detecting invalid vendor rows."""
+    df = pd.DataFrame({
+        "vendor_name": ["JJ’s Diner Goods", "Lil’ Sebastian Co.", "Sweetums Industries"],
+        "total": [1000, 800, 2000],
+    })
+    result = evaluate_q3_structure(df)
+    assert result["structure_ok"] is False
     assert result["missing_vendors"] == []
 
 
@@ -429,7 +510,7 @@ def test_is_desc_sorted_within_groups_ignores_total_rows() -> None:
 # ---------------------------------------------------------------------------
 
 from openpyxl.styles import PatternFill
-from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS
+from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS, HOLIDAY_ONLY_CUSTOMERS_COMPLETE
 
 _YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
@@ -468,6 +549,11 @@ def test_check_q8_highlight_exact_match(tmp_path: Path) -> None:
     correct_ids = sorted(HOLIDAY_ONLY_CUSTOMERS)
     path, sname = _make_q8_workbook(tmp_path, highlighted_ids=correct_ids)
     result = check_q8_highlight(path, sname)
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        assert result["match"] is False
+        assert result["needs_review"] is True
+        assert any("incomplete" in n.lower() for n in result["notes"])
+        return
     assert result["match"] is True
     assert result["missing_pivot"] is False
 
@@ -484,6 +570,11 @@ def test_check_q8_highlight_no_highlights(tmp_path: Path) -> None:
     path = tmp_path / "q8_no_hl.xlsx"
     wb.save(path)
     result = check_q8_highlight(path, "Q8")
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        assert result["match"] is False
+        assert result["needs_review"] is True
+        assert any("incomplete" in n.lower() for n in result["notes"])
+        return
     assert result["match"] is False
     assert result["missing_pivot"] is True
     assert any("highlight" in n.lower() for n in result["notes"])
@@ -496,6 +587,11 @@ def test_check_q8_highlight_within_tolerance(tmp_path: Path) -> None:
     slightly_off = correct_ids[1:]  # remove one
     path, sname = _make_q8_workbook(tmp_path, highlighted_ids=slightly_off)
     result = check_q8_highlight(path, sname)
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        assert result["match"] is False
+        assert result["needs_review"] is True
+        assert any("incomplete" in n.lower() for n in result["notes"])
+        return
     # With only 10 IDs in the constant set a 1-ID miss is 10%, so tolerate
     # only when the set is large enough.  Skip assertion when set is tiny.
     if len(correct_ids) > 20:
@@ -507,6 +603,11 @@ def test_check_q8_highlight_wrong_ids(tmp_path: Path) -> None:
     wrong_ids = [999001, 999002, 999003]
     path, sname = _make_q8_workbook(tmp_path, highlighted_ids=wrong_ids)
     result = check_q8_highlight(path, sname)
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        assert result["match"] is False
+        assert result["needs_review"] is True
+        assert any("incomplete" in n.lower() for n in result["notes"])
+        return
     assert result["match"] is False
     assert result["missing_pivot"] is False
     assert "Incorrect value" in result["notes"]
@@ -521,6 +622,11 @@ def test_check_q8_highlight_missing_sheet(tmp_path: Path) -> None:
     path = tmp_path / "q8_wrong_sheet.xlsx"
     wb.save(path)
     result = check_q8_highlight(path, "Q8")
+    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
+        assert result["match"] is False
+        assert result["needs_review"] is True
+        assert any("incomplete" in n.lower() for n in result["notes"])
+        return
     assert result["match"] is False
     assert "Missing highlight" in result["notes"]
 

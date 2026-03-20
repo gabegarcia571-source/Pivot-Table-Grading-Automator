@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pyo
+pivot_grader/outputs/
+*.log
+run_summary.json

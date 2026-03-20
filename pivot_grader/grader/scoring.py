@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 DEDUCTIONS = {
     "missing_pivot": {"points": -1.0, "comment": "Missing pivot table"},
     "no_sort": {"points": -0.3, "comment": "Incorrect sort"},
+    "incorrect_filter": {"points": -0.3, "comment": "Incorrect filter"},
     "extra_columns": {
         "points": -0.3,
         "comment": "Extra columns",
@@ -73,29 +76,47 @@ def format_short_comments(comments: list[str], max_words: int = 15) -> str:
     return "; ".join(out)
 
 
-def compute_question_score(
-    has_pivot: bool,
-    pivot_match: bool,
-    structural_issues: list[str],
-    explanation_deduct: bool,
-) -> tuple[float, list[str]]:
-    if not has_pivot:
-        return 0.0, [DEDUCTIONS["missing_pivot"]["comment"]]
+def assemble_score(contract: dict[str, Any]) -> tuple[float, list[str]]:
+    """Assemble final score/comments from question-module contract output.
+
+    Uses the same deduction magnitudes as compute_question_score:
+      - structural: 0.3
+      - value: 0.7
+      - explanation: 0.3
+    Formatting is currently informational in this scoring model (weight = 0.0).
+    """
+    structural_score = float(contract.get("structural_score", 0.0))
+    value_score = float(contract.get("value_score", 0.0))
+    formatting_score = float(contract.get("formatting_score", 1.0))
+    explanation_score = float(contract.get("explanation_score", 1.0))
+
+    # Clamp to [0, 1] to keep scoring stable even if a module returns out-of-range values.
+    structural_score = max(0.0, min(1.0, structural_score))
+    value_score = max(0.0, min(1.0, value_score))
+    formatting_score = max(0.0, min(1.0, formatting_score))
+    explanation_score = max(0.0, min(1.0, explanation_score))
+
+    structural_weight = abs(float(DEDUCTIONS["incorrect_filter"]["points"]))
+    value_weight = abs(float(DEDUCTIONS["wrong_values"]["points"]))
+    explanation_weight = abs(float(DEDUCTIONS["bad_explanation"]["points"]))
+    formatting_weight = 0.0
 
     score = 1.0
+    score -= structural_weight * (1.0 - structural_score)
+    score -= value_weight * (1.0 - value_score)
+    score -= explanation_weight * (1.0 - explanation_score)
+    score -= formatting_weight * (1.0 - formatting_score)
+
     comments: list[str] = []
-
-    for issue_key in structural_issues:
-        if issue_key in DEDUCTIONS:
-            score += DEDUCTIONS[issue_key]["points"]
-            comments.append(DEDUCTIONS[issue_key]["comment"])
-
-    if not pivot_match:
-        score += DEDUCTIONS["wrong_values"]["points"]
-        comments.append(DEDUCTIONS["wrong_values"]["comment"])
-
-    if explanation_deduct:
-        score += DEDUCTIONS["bad_explanation"]["points"]
-        comments.append(DEDUCTIONS["bad_explanation"]["comment"])
+    for key in (
+        "structural_issues",
+        "value_issues",
+        "formatting_issues",
+        "explanation_issues",
+    ):
+        for issue in contract.get(key, []) or []:
+            text = str(issue).strip()
+            if text:
+                comments.append(text)
 
     return max(0.0, round(score, 1)), comments
