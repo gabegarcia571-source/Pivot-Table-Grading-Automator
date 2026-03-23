@@ -1,27 +1,62 @@
-"""
-Hardcoded correct-answer sets used for highlight-based grading checks.
-
-TODO: Populate HOLIDAY_ONLY_CUSTOMERS with the full 2,487 customer IDs from
-      the answer key (GryzzlSales2024_Answer_Key.xlsx).  The partial set below
-      contains only the first few known IDs — replace the entire set once the
-      answer key is available.
-"""
+"""Answer-key derived constants used by question-specific graders."""
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# Q8 — customers who order ONLY in November and December
-# ---------------------------------------------------------------------------
-# These 2,487 customer IDs represent every customer whose purchase history
-# contains transactions exclusively in November and/or December 2024.
-# Source: GryzzlSales2024_Answer_Key.xlsx, Q8 sheet (highlighted rows).
-#
-# TODO: Replace with the full set extracted from the answer key.
-HOLIDAY_ONLY_CUSTOMERS: frozenset[int] = frozenset({
-    20, 37, 122, 124, 151, 171, 255, 331, 378, 383,
-    # ... paste the remaining ~2,477 IDs from the answer key here ...
-})
+from pathlib import Path
 
-# Safety flag for graders: False means this answer set is known incomplete and
-# must not be used for automatic grading.
-HOLIDAY_ONLY_CUSTOMERS_COMPLETE = False
+
+def load_holiday_customers_from_answer_key(answer_key_path: str) -> frozenset[int]:
+    """Read Q8 in the answer key and return IDs with purchases only in Nov/Dec."""
+    try:
+        import openpyxl
+    except Exception:
+        return frozenset()
+
+    workbook_path = Path(answer_key_path)
+    if not workbook_path.exists():
+        return frozenset()
+
+    try:
+        wb = openpyxl.load_workbook(workbook_path, data_only=True, read_only=True)
+    except Exception:
+        return frozenset()
+
+    if "Q8" not in wb.sheetnames:
+        wb.close()
+        return frozenset()
+
+    ws = wb["Q8"]
+    ids: set[int] = set()
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        customer_id = row[0]
+        if customer_id is None:
+            continue
+
+        months = row[1:13]  # Jan..Dec
+        jan_oct = months[:10]
+        nov_dec = months[10:12]
+
+        has_jan_oct = any(v is not None and str(v).strip() != "" for v in jan_oct)
+        has_nov_dec = any(v is not None and str(v).strip() != "" for v in nov_dec)
+
+        if (not has_jan_oct) and has_nov_dec:
+            try:
+                ids.add(int(customer_id))
+            except (TypeError, ValueError):
+                continue
+
+    wb.close()
+    return frozenset(ids)
+
+
+def _default_answer_key_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "answer_key" / "GryzzlSales2024 - Answer Key.xlsx"
+
+# Q8 — customers who order ONLY in November and/or December.
+HOLIDAY_ONLY_CUSTOMERS: frozenset[int] = load_holiday_customers_from_answer_key(
+    str(_default_answer_key_path())
+)
+
+# Safety flag for graders: True only when the extracted set is complete.
+HOLIDAY_ONLY_CUSTOMERS_COMPLETE = len(HOLIDAY_ONLY_CUSTOMERS) == 2487

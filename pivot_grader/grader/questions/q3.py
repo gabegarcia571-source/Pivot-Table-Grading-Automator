@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from grader.pivot_checker import compare_pivot_values_subset, has_multiple_items_marker
+from grader.pivot_checker import compare_pivot_values_subset, evaluate_highlight_formatting, has_multiple_items_marker
 from grader.utils.normalize import normalize_label
 
 _KNOWN_VENDORS: frozenset[str] = frozenset({
@@ -73,21 +73,24 @@ def grade_question(
 	student_df: pd.DataFrame,
 	answer_df: pd.DataFrame,
 	question_cfg: dict[str, Any],
+	workbook_path: Any = None,
+	sheet_name: str | None = None,
 ) -> dict[str, Any]:
 	structural_issues: list[str] = []
 	value_issues: list[str] = []
 
 	if student_df.empty:
+		formatting_score, formatting_issues = evaluate_highlight_formatting(workbook_path, sheet_name)
 		structural_issues.append("Missing pivot table")
 		value_issues.append("Missing pivot table")
 		return {
 			"structural_score": 0.0,
 			"value_score": 0.0,
-			"formatting_score": 1.0,
+			"formatting_score": formatting_score,
 			"explanation_score": 1.0,
 			"structural_issues": structural_issues,
 			"value_issues": value_issues,
-			"formatting_issues": [],
+			"formatting_issues": formatting_issues,
 			"explanation_issues": [],
 		}
 
@@ -123,13 +126,15 @@ def grade_question(
 			"Missing required top product(s): " + ", ".join(value_result["missing_required"]) + "."
 		)
 
+	formatting_score, formatting_issues = evaluate_highlight_formatting(workbook_path, sheet_name)
+
 	return {
 		"structural_score": structural_score,
 		"value_score": value_score,
-		"formatting_score": 1.0,
+		"formatting_score": formatting_score,
 		"explanation_score": 1.0,
 		"structural_issues": structural_issues,
 		"value_issues": value_issues,
-		"formatting_issues": [],
+		"formatting_issues": formatting_issues,
 		"explanation_issues": [],
 	}

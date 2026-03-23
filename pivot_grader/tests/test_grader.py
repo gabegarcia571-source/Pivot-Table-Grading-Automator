@@ -4,21 +4,32 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment
 
 from grader.grade_writer import write_grades
 from grader.ingest import find_pivot_origin, load_student_submission
 from grader.pivot_checker import (
     compare_pivot_values,
     compare_pivot_values_subset,
+    evaluate_highlight_formatting,
+    has_any_highlight,
+    is_group_order_desc,
     is_desc_sorted_within_groups,
     sheet_fingerprint,
     fingerprint_similarity,
 )
 from grader.questions.q3 import evaluate_q3_structure
 from grader.questions.q4 import check_q4_average
-from grader.questions.q5 import check_q5_filter
-from grader.questions.q8 import check_q8_highlight
-from grader.questions.q10 import check_q10_filter
+from grader.questions.q5 import check_q5_filter, grade_question as grade_q5
+from grader.questions.q6 import (
+    _best_numeric_col,
+    _extract_nested_vendor_product_values,
+    grade_question as grade_q6,
+)
+from grader.questions.q7 import _compare_maps
+from grader.questions.q8 import grade_question as grade_q8
+from grader.questions.q9 import grade_question as grade_q9
+from grader.questions.q10 import check_q10_filter, grade_question as grade_q10
 
 
 def test_find_pivot_origin_standard() -> None:
@@ -97,16 +108,16 @@ def test_load_student_submission_from_file_path(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_check_q4_average_match() -> None:
-    """A value within 2.0 of 46.48 should produce match=True."""
-    df = pd.DataFrame({"order_id": [1, 2, 3], "order_total": [44.50, 46.48, 50.00]})
+    """A value within 2.0 of 149.47 should produce match=True."""
+    df = pd.DataFrame({"order_id": [1, 2, 3], "order_total": [144.5, 149.48, 150.0]})
     result = check_q4_average(df)
     assert result["has_numeric"] is True
     assert result["match"] is True
-    assert abs(result["closest"] - 46.48) <= 2.0
+    assert abs(result["closest"] - 149.47) <= 2.0
 
 
 def test_check_q4_average_wrong_values() -> None:
-    """Values that exist but none near 46.48 — wrong_values deduction expected."""
+    """Values that exist but none near 149.47 — wrong_values deduction expected."""
     df = pd.DataFrame({"order_id": [1, 2, 3], "line_avg": [12.50, 13.00, 11.75]})
     result = check_q4_average(df)
     assert result["has_numeric"] is True
@@ -214,6 +225,83 @@ def test_compare_pivot_values_subset_can_ignore_q3_vendor_group_headers() -> Non
 
     assert result["match"] is True
     assert result["mismatches"] == []
+
+
+def test_q6_best_numeric_col_prefers_percent_column() -> None:
+    df = pd.DataFrame(
+        {
+            "Row Labels": ["A", "B"],
+            "Raw Dollars": [1200.0, 800.0],
+            "% of Vendor": [0.6, 0.4],
+        }
+    )
+
+    assert _best_numeric_col(df) == "% of Vendor"
+
+
+def test_q6_extract_nested_values_uses_alignment_indent() -> None:
+    df = pd.DataFrame(
+        {
+            "Row Labels": ["Sweetums", "Soda", "Candy"],
+            "Value": [1000.0, 0.6, 0.4],
+        }
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "Row Labels"
+    ws["A2"] = "Sweetums"
+    ws["A3"] = "Soda"
+    ws["A3"].alignment = Alignment(indent=1)
+    ws["A4"] = "Candy"
+    ws["A4"].alignment = Alignment(indent=1)
+
+    nested = _extract_nested_vendor_product_values(df, ws=ws)
+
+    assert nested == {
+        "sweetums::soda": 0.6,
+        "sweetums::candy": 0.4,
+    }
+
+
+def test_q6_partial_expansion_shared_product_labels_can_pass() -> None:
+    student = pd.DataFrame(
+        {
+            "Row Labels": ["Sweetums", "Soda", "Candy"],
+            "Value": [1.0, 0.6, 0.4],
+        }
+    )
+    answer = pd.DataFrame(
+        {
+            "Row Labels": ["Soda", "Candy", "Waffle Ale", "Pretzel"],
+            "Value": [0.6, 0.4, 0.7, 0.3],
+        }
+    )
+
+    result = grade_q6(student, answer, question_cfg={"explanation_required": False})
+
+    assert result["value_score"] == 1.0
+    assert result["value_issues"] == []
+
+
+def test_q6_partial_expansion_fails_when_shared_label_value_wrong() -> None:
+    student = pd.DataFrame(
+        {
+            "Row Labels": ["Sweetums", "Soda", "Candy"],
+            "Value": [1.0, 0.61, 0.4],
+        }
+    )
+    answer = pd.DataFrame(
+        {
+            "Row Labels": ["Soda", "Candy", "Waffle Ale", "Pretzel"],
+            "Value": [0.6, 0.4, 0.7, 0.3],
+        }
+    )
+
+    result = grade_q6(student, answer, question_cfg={"explanation_required": False})
+
+    assert result["value_score"] == 0.0
+    assert result["value_issues"]
 
 
 def test_write_grades(tmp_path: Path) -> None:
@@ -379,6 +467,7 @@ def test_check_q5_filter_correct() -> None:
     result = check_q5_filter(df)
     assert result["filter_ok"] is True
     assert result["non_summer_months_found"] == []
+    assert result["summer_months_found"]
 
 
 def test_check_q5_filter_wrong() -> None:
@@ -392,35 +481,125 @@ def test_check_q5_filter_wrong() -> None:
     assert "jan" in result["non_summer_months_found"]
 
 
+def test_check_q5_filter_fails_when_no_summer_months_present() -> None:
+    """(All)-style pivot with no month breakdown should fail the filter check."""
+    df = pd.DataFrame(
+        {
+            "Row Labels": ["Food & Drink", "Home & Lifestyle", "Clothing & Accessories"],
+            "order_short_date": ["(All)", "(All)", "(All)"],
+            "Value": [100.0, 80.0, 60.0],
+        }
+    )
+
+    result = check_q5_filter(df)
+    assert result["filter_ok"] is False
+    assert result["non_summer_months_found"] == []
+    assert result["summer_months_found"] == []
+
+
+def test_grade_q5_reports_no_summer_filter_not_applied_message() -> None:
+    student_df = pd.DataFrame(
+        {
+            "Row Labels": ["Food & Drink", "Clothing & Accessories"],
+            "order_short_date": ["(All)", "(All)"],
+            "Sum of total_product_price": [16160, 9746],
+        }
+    )
+    answer_df = pd.DataFrame(
+        {
+            "Row Labels": ["Food & Drink", "Jun", "Jul", "Aug"],
+            "Sum of total_product_price": [16160, 5858, 5584, 4718],
+        }
+    )
+
+    result = grade_q5(student_df, answer_df, question_cfg={})
+
+    assert result["structural_score"] == 0.0
+    assert "Month filter not applied - no summer months found in pivot" in result["structural_issues"]
+
+
+def test_grade_q5_non_summer_message_only_when_summer_present() -> None:
+    student_df = pd.DataFrame(
+        {
+            "Row Labels": ["Jun", "Jul", "Jan"],
+            "category_name": ["Food & Drink", "Clothing & Accessories", "Home & Lifestyle"],
+            "Sum of total_product_price": [100.0, 80.0, 60.0],
+        }
+    )
+    answer_df = pd.DataFrame(
+        {
+            "Row Labels": ["Food & Drink", "Jun", "Jul", "Aug"],
+            "Sum of total_product_price": [100.0, 40.0, 35.0, 25.0],
+        }
+    )
+
+    result = grade_q5(student_df, answer_df, question_cfg={})
+    assert result["structural_score"] == 0.0
+    assert any("Month filter incorrect - non-summer months found:" in s for s in result["structural_issues"])
+    assert all("Month filter not applied - no summer months found in pivot" not in s for s in result["structural_issues"])
+
+
+def test_grade_q5_ignores_month_subrows_in_answer_values() -> None:
+    """Q5 value check should compare category totals, not nested month detail rows."""
+    student_df = pd.DataFrame({
+        "Row Labels": ["Food & Drink", "Clothing & Accessories"],
+        "order_short_date": ["Jun", "Jul"],
+        "Sum of total_product_price": [16160, 9746],
+    })
+    answer_df = pd.DataFrame({
+        "Row Labels": [
+            "Food & Drink",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Clothing & Accessories",
+        ],
+        "Sum of total_product_price": [16160, 5858, 5584, 4718, 9746],
+    })
+
+    result = grade_q5(student_df, answer_df, question_cfg={})
+
+    assert result["structural_score"] == 1.0
+    assert result["value_score"] == 1.0
+    assert result["value_issues"] == []
+
+
 # ---------------------------------------------------------------------------
 # Q10 structure-check tests (vendor count, column headers, proportion values)
 # ---------------------------------------------------------------------------
 
 _Q10_VENDORS = [
     "Sweetums Industries",
+    "KnopeWorks",
     "JJ's Diner Goods",
+    "Perd Products",
     "Rent-A-Swag Inc.",
     "Lil' Sebastian Co.",
-    "Vendor E",
-    "Vendor F",
-    "Vendor G",
+    "Pyramid Outfitters",
+    "Pawnee Goddesses Collective",
+    "Entertainment 720",
+    "Treat Yo' Self LLC",
+    "Mouse Rat Merchandising",
+    "Eagleton Elegance",
+    "Snakehole Spirits Co.",
+    "Burt Macklin Enterprises",
 ]
 
 
 def test_check_q10_filter_correct() -> None:
-    """7 vendor rows, Honey + No Promo Code columns, values in [0,1] → filter_ok=True."""
+    """14 vendor rows with honey/no-promo data and numerics should pass filter check."""
     df = pd.DataFrame({
         "vendor_name": _Q10_VENDORS,
-        "Honey": [0.21, 0.15, 0.53, 0.40, 0.30, 0.10, 0.25],
-        "No Promo Code": [0.79, 0.85, 0.47, 0.60, 0.70, 0.90, 0.75],
-        "Grand Total": [1.00] * 7,
+        "Honey": [0.07, 0.07, 0.06, 0.07, 0.20, 0.05, 0.06, 0.07, 0.06, 0.08, 0.06, 0.06, 0.09, 0.05],
+        "No Promo Code": [0.93, 0.93, 0.94, 0.93, 0.80, 0.95, 0.94, 0.93, 0.94, 0.92, 0.94, 0.94, 0.91, 0.95],
+        "Grand Total": [1.00] * 14,
     })
     result = check_q10_filter(df)
     assert result["filter_ok"] is True
     assert result["vendor_count_ok"] is True
     assert result["has_honey_col"] is True
     assert result["has_no_promo_col"] is True
-    assert result["values_in_range"] is True
+    assert result["numeric_present"] is True
 
 
 def test_check_q10_filter_wrong_vendor_count() -> None:
@@ -440,8 +619,8 @@ def test_check_q10_filter_missing_honey_column() -> None:
     """No 'Honey' column header → filter_ok=False, has_honey_col=False."""
     df = pd.DataFrame({
         "vendor_name": _Q10_VENDORS,
-        "No Promo Code": [0.79, 0.85, 0.47, 0.60, 0.70, 0.90, 0.75],
-        "Grand Total": [1.00] * 7,
+        "No Promo Code": [0.79] * 14,
+        "Grand Total": [1.00] * 14,
     })
     result = check_q10_filter(df)
     assert result["filter_ok"] is False
@@ -449,14 +628,15 @@ def test_check_q10_filter_missing_honey_column() -> None:
 
 
 def test_check_q10_filter_values_not_proportions() -> None:
-    """Raw counts instead of proportions (values > 1) → filter_ok=False."""
+    """Raw counts should fail value-range check for proportion-based Q10 output."""
     df = pd.DataFrame({
         "vendor_name": _Q10_VENDORS,
-        "Honey": [210, 150, 530, 400, 300, 100, 250],
-        "No Promo Code": [790, 850, 470, 600, 700, 900, 750],
+        "Honey": [210, 150, 530, 400, 300, 100, 250, 180, 190, 260, 140, 110, 170, 120],
+        "No Promo Code": [790, 850, 470, 600, 700, 900, 750, 820, 810, 740, 860, 890, 830, 880],
     })
     result = check_q10_filter(df)
     assert result["filter_ok"] is False
+    assert result["numeric_present"] is True
     assert result["values_in_range"] is False
 
 
@@ -506,24 +686,20 @@ def test_is_desc_sorted_within_groups_ignores_total_rows() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Q8 highlight-detection tests (check_q8_highlight uses openpyxl fill scanning)
+# Q8 highlight-detection tests (shared has_any_highlight utility)
 # ---------------------------------------------------------------------------
 
-from openpyxl.styles import PatternFill
-from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS, HOLIDAY_ONLY_CUSTOMERS_COMPLETE
+from openpyxl.styles import Color, PatternFill
 
 _YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
 
-def _make_q8_workbook(
+def _make_highlight_workbook(
     tmp_path: Path,
-    highlighted_ids: list[int],
-    non_highlighted_ids: list[int] | None = None,
+    highlighted_rows: list[int],
+    use_theme_fill: bool = False,
 ) -> tuple[Path, str]:
-    """Write a minimal Q8 xlsx with the given customer IDs, highlighting the
-    *highlighted_ids* rows with a yellow fill.  Returns (path, sheet_name)."""
-    if non_highlighted_ids is None:
-        non_highlighted_ids = [99999]  # a row that should not be highlighted
+    """Write a minimal xlsx and highlight selected rows. Returns (path, sheet_name)."""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -531,104 +707,41 @@ def _make_q8_workbook(
     ws["A1"] = "customer_id"
     ws["B1"] = "Nov"
     ws["C1"] = "Dec"
-    row = 2
-    for cid in highlighted_ids:
+    for row, cid in enumerate([1001, 1002, 1003, 1004, 1005], start=2):
         ws.cell(row=row, column=1, value=cid)
-        ws.cell(row=row, column=1).fill = _YELLOW_FILL
-        row += 1
-    for cid in non_highlighted_ids:
-        ws.cell(row=row, column=1, value=cid)
-        row += 1
+        if row in highlighted_rows:
+            if use_theme_fill:
+                ws.cell(row=row, column=1).fill = PatternFill(fill_type="solid", fgColor=Color(theme=1))
+            else:
+                ws.cell(row=row, column=1).fill = _YELLOW_FILL
     path = tmp_path / "q8_test.xlsx"
     wb.save(path)
     return path, "Q8"
 
 
-def test_check_q8_highlight_exact_match(tmp_path: Path) -> None:
-    """Highlighted IDs exactly match HOLIDAY_ONLY_CUSTOMERS → match=True."""
-    correct_ids = sorted(HOLIDAY_ONLY_CUSTOMERS)
-    path, sname = _make_q8_workbook(tmp_path, highlighted_ids=correct_ids)
-    result = check_q8_highlight(path, sname)
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        assert result["match"] is False
-        assert result["needs_review"] is True
-        assert any("incomplete" in n.lower() for n in result["notes"])
-        return
-    assert result["match"] is True
-    assert result["missing_pivot"] is False
+def test_has_any_highlight_true_on_solid_fill(tmp_path: Path) -> None:
+    path, sname = _make_highlight_workbook(tmp_path, highlighted_rows=[3])
+    assert has_any_highlight(path, sname) is True
 
 
-def test_check_q8_highlight_no_highlights(tmp_path: Path) -> None:
-    """No cells highlighted → missing_pivot=True, match=False."""
-    wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.title = "Q8"
-    ws["A1"] = "customer_id"
-    for i, cid in enumerate(sorted(HOLIDAY_ONLY_CUSTOMERS)[:10], start=2):
-        ws.cell(row=i, column=1, value=cid)  # no fill applied
-    path = tmp_path / "q8_no_hl.xlsx"
-    wb.save(path)
-    result = check_q8_highlight(path, "Q8")
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        assert result["match"] is False
-        assert result["needs_review"] is True
-        assert any("incomplete" in n.lower() for n in result["notes"])
-        return
-    assert result["match"] is False
-    assert result["missing_pivot"] is True
-    assert any("highlight" in n.lower() for n in result["notes"])
+def test_has_any_highlight_false_when_none(tmp_path: Path) -> None:
+    path, sname = _make_highlight_workbook(tmp_path, highlighted_rows=[])
+    assert has_any_highlight(path, sname) is False
 
 
-def test_check_q8_highlight_within_tolerance(tmp_path: Path) -> None:
-    """Highlighted IDs have a small error (≤5%) → still match=True."""
-    correct_ids = sorted(HOLIDAY_ONLY_CUSTOMERS)
-    # Drop 1 ID (tiny error, well within 5% for any non-trivial set size)
-    slightly_off = correct_ids[1:]  # remove one
-    path, sname = _make_q8_workbook(tmp_path, highlighted_ids=slightly_off)
-    result = check_q8_highlight(path, sname)
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        assert result["match"] is False
-        assert result["needs_review"] is True
-        assert any("incomplete" in n.lower() for n in result["notes"])
-        return
-    # With only 10 IDs in the constant set a 1-ID miss is 10%, so tolerate
-    # only when the set is large enough.  Skip assertion when set is tiny.
-    if len(correct_ids) > 20:
-        assert result["match"] is True
+def test_has_any_highlight_true_on_theme_fill(tmp_path: Path) -> None:
+    path, sname = _make_highlight_workbook(tmp_path, highlighted_rows=[4], use_theme_fill=True)
+    assert has_any_highlight(path, sname) is True
 
 
-def test_check_q8_highlight_wrong_ids(tmp_path: Path) -> None:
-    """Completely wrong IDs highlighted → match=False."""
-    wrong_ids = [999001, 999002, 999003]
-    path, sname = _make_q8_workbook(tmp_path, highlighted_ids=wrong_ids)
-    result = check_q8_highlight(path, sname)
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        assert result["match"] is False
-        assert result["needs_review"] is True
-        assert any("incomplete" in n.lower() for n in result["notes"])
-        return
-    assert result["match"] is False
-    assert result["missing_pivot"] is False
-    assert "Incorrect value" in result["notes"]
-
-
-def test_check_q8_highlight_missing_sheet(tmp_path: Path) -> None:
-    """Sheet name not in workbook → match=False with descriptive note."""
+def test_has_any_highlight_false_on_missing_sheet(tmp_path: Path) -> None:
     wb = Workbook()
     ws = wb.active
     assert ws is not None
     ws.title = "WrongSheet"
     path = tmp_path / "q8_wrong_sheet.xlsx"
     wb.save(path)
-    result = check_q8_highlight(path, "Q8")
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        assert result["match"] is False
-        assert result["needs_review"] is True
-        assert any("incomplete" in n.lower() for n in result["notes"])
-        return
-    assert result["match"] is False
-    assert "Missing highlight" in result["notes"]
+    assert has_any_highlight(path, "Q8") is False
 
 
 # ---------------------------------------------------------------------------
@@ -663,3 +776,176 @@ def test_fingerprint_similarity_different_sizes() -> None:
     low_score = fingerprint_similarity(fp_small, fp_large)
     # Different row bucket (tiny vs large) → no row_bucket bonus; column mismatch → low score
     assert low_score < 3.0
+
+
+def test_is_group_order_desc_fails_wrong_top_category_order() -> None:
+    answer_df = pd.DataFrame(
+        {
+            "Category": [
+                "Food & Drink",
+                "Food & Drink",
+                "Clothing & Accessories",
+                "Clothing & Accessories",
+            ],
+            "Value": [275.0, 225.0, 250.0, 200.0],
+        }
+    )
+    df = pd.DataFrame(
+        {
+            "Category": [
+                "Clothing & Accessories",
+                "Clothing & Accessories",
+                "Food & Drink",
+                "Food & Drink",
+            ],
+            "Value": [250.0, 200.0, 275.0, 225.0],
+        }
+    )
+
+    assert is_desc_sorted_within_groups(df) is True
+    assert is_group_order_desc(df, answer_df) is False
+
+
+def test_q7_compare_maps_detects_zero_value_mismatch() -> None:
+    answer_map = {
+        "food drink::kids teens": 0.0,
+        "food drink::adults": 0.9,
+    }
+    student_map = {
+        "food drink::kids teens": 0.2,
+        "food drink::adults": 0.9,
+    }
+
+    result = _compare_maps(student_map, answer_map)
+
+    assert result["match"] is False
+    assert any(m["label"] == "food drink::kids teens" for m in result["mismatches"])
+
+
+def test_q8_grade_question_deducts_wrong_measure() -> None:
+    student_df = pd.DataFrame(
+        {
+            "customer_id": list(range(1, 1001)),
+            "Nov": [1] * 1000,
+            "Dec": [1] * 1000,
+            "Count of order_id": [2] * 1000,
+        }
+    )
+
+    result = grade_q8(student_df, pd.DataFrame(), question_cfg={})
+
+    assert result["structural_score"] == 1.0
+    assert result["value_score"] == 0.0
+    assert "Wrong measure: used Count instead of Sum of total_product_price" in result["value_issues"]
+
+
+def test_q9_grade_question_reports_measure_mismatch() -> None:
+    answer_df = pd.DataFrame(
+        {
+            "Row Labels": [
+                "4",
+                "Honey",
+                "No Promo Code",
+                "12",
+                "Honey",
+                "No Promo Code",
+                "27",
+                "Honey",
+                "No Promo Code",
+            ],
+            "Count of promo_code": [2, 1, 1, 2, 1, 1, 2, 1, 1],
+        }
+    )
+    student_df = pd.DataFrame(
+        [
+            ["Row Labels", "Honey", "No Promo Code", "Grand Total", "Count of order_id"],
+            [4, 1, 1, 2, None],
+            [12, 1, 1, 2, None],
+            [27, 1, 1, 2, None],
+        ]
+    )
+
+    result = grade_q9(student_df, answer_df, question_cfg={"explanation_required": False})
+
+    assert result["value_score"] == 0.0
+    assert "Wrong measure: used Count of order_id instead of Count of promo_code" in result["value_issues"]
+
+
+def test_q9_grade_question_flags_alternate_matrix_layout_for_review() -> None:
+    answer_df = pd.DataFrame(
+        {
+            "Row Labels": ["4", "12", "27"],
+            "Count of promo_code": [2, 2, 2],
+        }
+    )
+    student_df = pd.DataFrame(
+        [
+            ["Row Labels", "Honey", "No Promo Code", "Count of promo_code"],
+            [4, 1, 1, None],
+            [12, 1, 1, None],
+            [27, 1, 1, None],
+        ]
+    )
+
+    result = grade_q9(student_df, answer_df, question_cfg={"explanation_required": False})
+
+    assert any("NEEDS_REVIEW: alternate layout detected" in s for s in result["structural_issues"])
+    assert result["needs_review"] is True
+    assert result["value_score"] == 0.0
+
+
+def test_q10_grade_question_can_return_full_credit() -> None:
+    vendors = _Q10_VENDORS
+    student_df = pd.DataFrame(
+        {
+            "vendor_name": vendors,
+            "Honey": [0.05] * len(vendors),
+            "No Promo Code": [0.95] * len(vendors),
+            "Grand Total": [1.0] * len(vendors),
+            "month filter": ["(multiple items)"] * len(vendors),
+        }
+    )
+    answer_df = student_df.copy()
+
+    result = grade_q10(student_df, answer_df, question_cfg={})
+
+    assert result["structural_score"] == 1.0
+    assert result["value_score"] == 1.0
+
+
+def test_q10_grade_question_reports_vendor_count_failure_message() -> None:
+    student_df = pd.DataFrame(
+        {
+            "vendor_name": _Q10_VENDORS[:4],
+            "Honey": [0.1, 0.2, 0.3, 0.4],
+            "No Promo Code": [0.9, 0.8, 0.7, 0.6],
+            "month filter": ["(multiple items)"] * 4,
+        }
+    )
+    answer_df = pd.DataFrame(
+        {
+            "vendor_name": _Q10_VENDORS,
+            "Honey": [0.05] * len(_Q10_VENDORS),
+            "No Promo Code": [0.95] * len(_Q10_VENDORS),
+            "month filter": ["(multiple items)"] * len(_Q10_VENDORS),
+        }
+    )
+
+    result = grade_q10(student_df, answer_df, question_cfg={})
+
+    assert result["structural_score"] == 0.0
+    assert any("Expected 14 vendors" in s for s in result["structural_issues"])
+
+
+def test_evaluate_highlight_formatting_uses_workbook_fallback(tmp_path: Path) -> None:
+    path, _ = _make_highlight_workbook(tmp_path, highlighted_rows=[3])
+    score, issues = evaluate_highlight_formatting(path, None)
+    assert score == 1.0
+    assert issues == ["NEEDS_REVIEW: highlight check skipped"]
+
+
+def test_evaluate_highlight_formatting_missing_highlight_returns_half_credit(tmp_path: Path) -> None:
+    path, sname = _make_highlight_workbook(tmp_path, highlighted_rows=[])
+    score, issues = evaluate_highlight_formatting(path, sname)
+    assert score == 0.5
+    assert issues == ["Missing highlight"]

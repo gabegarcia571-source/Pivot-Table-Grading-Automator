@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib
 import inspect
 import atexit
@@ -9,6 +10,7 @@ import signal
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import argparse
 
 import pandas as pd
 
@@ -152,21 +154,27 @@ def _grade_one_question(
         _trace_branch(qid, "NEEDS_REVIEW", "invalid contract type")
         return None, f"{NEEDS_REVIEW}: invalid grading contract for {qid}"
 
-    explanation_score = float(contract.get("explanation_score", 1.0))
-    explanation_issues = [str(v) for v in (contract.get("explanation_issues") or [])]
-    if explanation_score == 0.0:
-        for issue in explanation_issues:
-            if issue.startswith(NEEDS_REVIEW):
-                _trace_branch(qid, "NEEDS_REVIEW", issue)
-                return None, issue
-
-    # Preserve existing NEEDS_REVIEW behavior for non-explanation paths (e.g., Q10/Q8).
-    for key in ("value_issues", "structural_issues", "formatting_issues"):
+    # Structural/value NEEDS_REVIEW requires full manual grading.
+    for key in ("value_issues", "structural_issues"):
         for issue in (contract.get(key) or []):
             issue_text = str(issue)
             if issue_text.startswith(NEEDS_REVIEW):
                 _trace_branch(qid, "NEEDS_REVIEW", issue_text)
                 return None, issue_text
+
+    explanation_issues = [str(v) for v in (contract.get("explanation_issues") or [])]
+    if any(issue.startswith(NEEDS_REVIEW) for issue in explanation_issues):
+        structural_score = max(0.0, min(1.0, float(contract.get("structural_score", 0.0))))
+        value_score = max(0.0, min(1.0, float(contract.get("value_score", 0.0))))
+        formatting_score = max(0.0, min(1.0, float(contract.get("formatting_score", 1.0))))
+        partial = 1.0
+        partial -= 0.3 * (1.0 - structural_score)
+        partial -= 0.7 * (1.0 - value_score)
+        partial -= 0.5 * (1.0 - formatting_score)
+        partial = max(0.0, round(partial, 1))
+        message = f"{NEEDS_REVIEW}: explanation pending manual grade"
+        _trace_branch(qid, "partial review", f"score={partial}")
+        return partial, message
 
     score, comments = assemble_score(contract)
     short_comment = format_short_comments(comments, max_words=comment_max_words)
@@ -215,17 +223,20 @@ def run_all(
 
     # Prefer direct workbook discovery so classes that submit many files inside
     # a single folder are processed one workbook per student.
-    student_workbooks = sorted(
-        [
-            p for p in submissions_path.rglob("*.xlsx")
-            if not p.name.startswith("~$") and "grade" not in p.name.lower()
-        ]
-    )
     submission_targets: list[Path]
-    if student_workbooks:
-        submission_targets = student_workbooks
+    if submissions_path.is_file():
+        submission_targets = [submissions_path]
     else:
-        submission_targets = sorted([p for p in submissions_path.iterdir() if p.is_dir()])
+        student_workbooks = sorted(
+            [
+                p for p in submissions_path.rglob("*.xlsx")
+                if not p.name.startswith("~$") and "grade" not in p.name.lower()
+            ]
+        )
+        if student_workbooks:
+            submission_targets = student_workbooks
+        else:
+            submission_targets = sorted([p for p in submissions_path.iterdir() if p.is_dir()])
     _trace("submission discovery", f"found {len(submission_targets)} target(s)")
 
     single_submission_mode = _trace_enabled()
@@ -340,11 +351,60 @@ def run_all(
     return summary
 
 
+def _first_existing_path(candidates: list[Path]) -> Path:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _parse_args(repo_root: Path) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run pivot-table grader for one file or a submissions folder.")
+    parser.add_argument(
+        "--student",
+        "--submissions",
+        dest="submissions_dir",
+        default=str(repo_root / "submissions"),
+        help="Path to a student workbook (.xlsx) or folder containing submissions.",
+    )
+    parser.add_argument(
+        "--answer_key",
+        default=str(
+            _first_existing_path(
+                [
+                    repo_root / "answer_key" / "GryzzlSales2024 - Answer Key.xlsx",
+                    repo_root / "answer_key" / "GryzzlSales2024_Answer_Key.xlsx",
+                ]
+            )
+        ),
+        help="Path to the answer-key workbook.",
+    )
+    parser.add_argument(
+        "--template",
+        default=str(
+            _first_existing_path(
+                [
+                    repo_root / "templates" / "Homework 3 Gradesheet Template.xlsx",
+                    repo_root / "templates" / "Homework_3_Gradesheet_Template.xlsx",
+                ]
+            )
+        ),
+        help="Path to gradesheet template workbook.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default=str(repo_root / "outputs"),
+        help="Output directory for generated grades and logs.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parents[1]
+    args = _parse_args(repo_root)
     run_all(
-        submissions_dir=repo_root / "submissions",
-        answer_key_path=repo_root / "answer_key" / "GryzzlSales2024_Answer_Key.xlsx",
-        template_path=repo_root / "templates" / "Homework_3_Gradesheet_Template.xlsx",
-        output_dir=repo_root / "outputs",
+        submissions_dir=Path(args.submissions_dir),
+        answer_key_path=Path(args.answer_key),
+        template_path=Path(args.template),
+        output_dir=Path(args.output_dir),
     )

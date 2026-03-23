@@ -4,85 +4,29 @@ from typing import Any
 
 import pandas as pd
 
-
-def _cell_is_highlighted(cell: Any) -> bool:
-    fill = cell.fill
-    if fill is None or fill.fill_type in (None, "none"):
-        return False
-    fg = fill.fgColor
-    if fg is None:
-        return False
-    if fg.type in ("theme", "indexed"):
-        return False
-    rgb = (fg.rgb if hasattr(fg, "rgb") else "").upper()
-    return rgb not in ("", "00000000", "FFFFFFFF", "FF000000")
+from grader.pivot_checker import evaluate_highlight_formatting
+from grader.utils.normalize import normalize_label
 
 
-def check_q8_highlight(workbook_path: Any, sheet_name: str) -> dict[str, Any]:
-    from pathlib import Path as _Path
+def _detect_measure(df: pd.DataFrame) -> str:
+    tokens: list[str] = []
+    tokens.extend(normalize_label(str(col)) for col in df.columns)
+    # Some exports place measure labels in top data rows instead of headers.
+    scan_rows = min(20, len(df))
+    for row_idx in range(scan_rows):
+        for value in df.iloc[row_idx].tolist():
+            if value is None or pd.isna(value):
+                continue
+            tokens.append(normalize_label(str(value)))
 
-    import openpyxl as _openpyxl
-
-    from grader.answer_constants import HOLIDAY_ONLY_CUSTOMERS, HOLIDAY_ONLY_CUSTOMERS_COMPLETE
-
-    notes: list[str] = []
-
-    if not HOLIDAY_ONLY_CUSTOMERS_COMPLETE:
-        return {
-            "match": False,
-            "missing_pivot": False,
-            "needs_review": True,
-            "notes": ["NEEDS_REVIEW: Q8 answer set is incomplete"],
-        }
-
-    try:
-        wb = _openpyxl.load_workbook(_Path(workbook_path), data_only=True)
-    except Exception:
-        notes.append("Missing highlight")
-        return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
-
-    if sheet_name not in wb.sheetnames:
-        notes.append("Missing highlight")
-        wb.close()
-        return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
-
-    ws = wb[sheet_name]
-    highlighted_ids: set[int] = set()
-
-    for row in ws.iter_rows():
-        if not row:
-            continue
-        row_highlighted = any(_cell_is_highlighted(cell) for cell in row)
-        if not row_highlighted:
-            continue
-        label_val = row[0].value
-        try:
-            highlighted_ids.add(int(label_val))
-        except (ValueError, TypeError):
-            pass
-
-    wb.close()
-
-    if not highlighted_ids:
-        notes.append("Missing highlight")
-        return {"match": False, "missing_pivot": True, "needs_review": False, "notes": notes}
-
-    correct_set = HOLIDAY_ONLY_CUSTOMERS
-    n_correct = max(1, len(correct_set))
-    false_positives = highlighted_ids - correct_set
-    false_negatives = correct_set - highlighted_ids
-    error_count = len(false_positives) + len(false_negatives)
-    error_rate = error_count / n_correct
-
-    if error_rate == 0.0:
-        return {"match": True, "missing_pivot": False, "needs_review": False, "notes": notes}
-
-    if error_rate <= 0.05:
-        return {"match": True, "missing_pivot": False, "needs_review": False, "notes": notes}
-
-    notes.append("Incorrect value")
-    return {"match": False, "missing_pivot": False, "needs_review": False, "notes": notes}
-
+    joined = " ".join(tokens)
+    has_count = "count" in joined
+    has_sum = "sum" in joined or "total product price" in joined
+    if has_count and not has_sum:
+        return "count_only"
+    if has_sum:
+        return "sum_present"
+    return "unknown"
 
 def grade_question(
     student_df: pd.DataFrame,
@@ -90,27 +34,49 @@ def grade_question(
     question_cfg: dict[str, Any],
     workbook_path: Any = None,
     sheet_name: str | None = None,
+    qid: str = "Q8",
 ) -> dict[str, Any]:
-    if workbook_path and sheet_name:
-        q8 = check_q8_highlight(workbook_path, sheet_name)
-    else:
-        q8 = {
-            "match": False,
-            "missing_pivot": False,
-            "needs_review": True,
-            "notes": ["NEEDS_REVIEW: workbook path unavailable for Q8 highlight detection"],
+    structural_issues: list[str] = []
+    value_issues: list[str] = []
+    formatting_issues: list[str] = []
+
+    if student_df.empty:
+        return {
+            "structural_score": 0.0,
+            "value_score": 0.0,
+            "formatting_score": 0.0,
+            "explanation_score": 1.0,
+            "structural_issues": ["Missing pivot table"],
+            "value_issues": ["Missing pivot table"],
+            "formatting_issues": ["Missing highlight"],
+            "explanation_issues": [],
         }
 
-    value_score = 1.0 if q8["match"] else 0.0
-    value_issues = list(q8.get("notes", []))
+    # Structural: pivot must have customer-level granularity
+    # (more than 1000 rows) and between 3 and 14 columns
+    structural_score = 1.0
+    if len(student_df) < 1000 or not (3 <= len(student_df.columns) <= 14):
+        structural_score = 0.0
+        structural_issues.append("Incorrect filter")
+
+    measure = _detect_measure(student_df)
+    measure_ok = measure != "count_only"
+    if not measure_ok:
+        value_issues.append("Wrong measure: used Count instead of Sum of total_product_price")
+
+    # Value: structure plus measure selection must match the target setup.
+    value_score = 1.0 if structural_score == 1.0 and measure_ok else 0.0
+
+    # Formatting: any highlight on the sheet = full credit
+    formatting_score, formatting_issues = evaluate_highlight_formatting(workbook_path, sheet_name)
 
     return {
-        "structural_score": 1.0,
+        "structural_score": structural_score,
         "value_score": value_score,
-        "formatting_score": 1.0,
+        "formatting_score": formatting_score,
         "explanation_score": 1.0,
-        "structural_issues": [],
+        "structural_issues": structural_issues,
         "value_issues": value_issues,
-        "formatting_issues": [],
+        "formatting_issues": formatting_issues,
         "explanation_issues": [],
     }

@@ -83,7 +83,7 @@ def assemble_score(contract: dict[str, Any]) -> tuple[float, list[str]]:
       - structural: 0.3
       - value: 0.7
       - explanation: 0.3
-    Formatting is currently informational in this scoring model (weight = 0.0).
+    Formatting carries the highlight deduction weight from the rubric.
     """
     structural_score = float(contract.get("structural_score", 0.0))
     value_score = float(contract.get("value_score", 0.0))
@@ -99,7 +99,7 @@ def assemble_score(contract: dict[str, Any]) -> tuple[float, list[str]]:
     structural_weight = abs(float(DEDUCTIONS["incorrect_filter"]["points"]))
     value_weight = abs(float(DEDUCTIONS["wrong_values"]["points"]))
     explanation_weight = abs(float(DEDUCTIONS["bad_explanation"]["points"]))
-    formatting_weight = 0.0
+    formatting_weight = abs(float(DEDUCTIONS["answer_not_highlighted"]["points"]))
 
     score = 1.0
     score -= structural_weight * (1.0 - structural_score)

@@ -4,9 +4,10 @@ from typing import Any
 
 import pandas as pd
 
+from grader.pivot_checker import evaluate_highlight_formatting
 from grader.qualitative_grader import grade_explanation
 
-Q4_TARGET = 46.48
+Q4_TARGET = 149.47
 Q4_TOLERANCE = 2.0
 
 
@@ -49,20 +50,23 @@ def grade_question(
 	student_df: pd.DataFrame,
 	answer_df: pd.DataFrame,
 	question_cfg: dict[str, Any],
+	workbook_path: Any = None,
+	sheet_name: str | None = None,
 	qid: str = "Q4",
 ) -> dict[str, Any]:
 	value_issues: list[str] = []
 	explanation_issues: list[str] = []
 
 	if student_df.empty:
+		formatting_score, formatting_issues = evaluate_highlight_formatting(workbook_path, sheet_name)
 		return {
 			"structural_score": 1.0,
 			"value_score": 0.0,
-			"formatting_score": 1.0,
+			"formatting_score": formatting_score,
 			"explanation_score": 1.0,
 			"structural_issues": [],
 			"value_issues": ["Missing pivot table"],
-			"formatting_issues": [],
+			"formatting_issues": formatting_issues,
 			"explanation_issues": [],
 		}
 
@@ -83,18 +87,21 @@ def grade_question(
 		llm_result = grade_explanation(qid, student_text, rubric_text)
 		if llm_result.get("needs_review", False):
 			explanation_score = 0.0
-			explanation_issues.append(str(llm_result.get("brief_reason", "NEEDS_REVIEW")))
+			reason = str(llm_result.get("brief_reason", "Manual review needed"))
+			explanation_issues.append(f"NEEDS_REVIEW: {reason}")
 		elif llm_result.get("deduct_explanation", False):
 			explanation_score = 0.0
 			explanation_issues.append(str(llm_result.get("brief_reason", "Needs more detail")))
 
+	formatting_score, formatting_issues = evaluate_highlight_formatting(workbook_path, sheet_name)
+
 	return {
 		"structural_score": 1.0,
 		"value_score": value_score,
-		"formatting_score": 1.0,
+		"formatting_score": formatting_score,
 		"explanation_score": explanation_score,
 		"structural_issues": [],
 		"value_issues": value_issues,
-		"formatting_issues": [],
+		"formatting_issues": formatting_issues,
 		"explanation_issues": explanation_issues,
 	}

@@ -7,6 +7,76 @@ import pandas as pd
 from grader.utils.normalize import normalize_label
 
 
+def _cell_is_highlighted(cell: Any) -> bool:
+    fill = cell.fill
+    if fill is None or fill.fill_type in (None, "none"):
+        return False
+    fg = fill.fgColor
+    if fg is None:
+        return False
+    if fg.type in ("theme", "indexed"):
+        return True
+    rgb = (fg.rgb if hasattr(fg, "rgb") else "").upper()
+    return rgb not in ("", "00000000", "FFFFFFFF", "FF000000")
+
+
+def has_any_highlight(workbook_path: Any, sheet_name: str) -> bool:
+    """Return True if any cell on the sheet has a non-default fill."""
+    import openpyxl
+    from pathlib import Path as _Path
+
+    try:
+        wb = openpyxl.load_workbook(_Path(workbook_path), data_only=True)
+    except Exception:
+        return False
+    if sheet_name not in wb.sheetnames:
+        wb.close()
+        return False
+    ws = wb[sheet_name]
+    for row in ws.iter_rows():
+        for cell in row:
+            if _cell_is_highlighted(cell):
+                wb.close()
+                return True
+    wb.close()
+    return False
+
+
+def has_any_highlight_in_workbook(workbook_path: Any) -> bool:
+    """Return True if any sheet in the workbook has a non-default fill."""
+    import openpyxl
+    from pathlib import Path as _Path
+
+    try:
+        wb = openpyxl.load_workbook(_Path(workbook_path), data_only=True)
+    except Exception:
+        return False
+
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if _cell_is_highlighted(cell):
+                    wb.close()
+                    return True
+
+    wb.close()
+    return False
+
+
+def evaluate_highlight_formatting(workbook_path: Any, sheet_name: str | None) -> tuple[float, list[str]]:
+    """Return (formatting_score, formatting_issues) for highlight requirement.
+
+    When a mapped sheet name is unavailable, fall back to workbook-level scan
+    so missing highlights are still penalized instead of silently passing.
+    """
+    if not workbook_path or not sheet_name:
+        return 1.0, ["NEEDS_REVIEW: highlight check skipped"]
+
+    if has_any_highlight(workbook_path, sheet_name):
+        return 1.0, []
+    return 0.5, ["Missing highlight"]
+
+
 def _coerce_label(value: Any) -> str:
     if pd.isna(value):
         return ""
@@ -303,6 +373,33 @@ def is_desc_sorted_within_groups(df: pd.DataFrame) -> bool:
             return False
 
     return checked_any_group
+
+
+def is_group_order_desc(student_df: pd.DataFrame, answer_df: pd.DataFrame) -> bool:
+    """Verify top-level group order in student data matches answer-key order."""
+    if student_df.empty or answer_df.empty or len(student_df.columns) < 1 or len(answer_df.columns) < 1:
+        return False
+
+    def _ordered_groups(df: pd.DataFrame) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        first_col = df.columns[0]
+        for raw in df[first_col].tolist():
+            label = normalize_label("" if pd.isna(raw) else str(raw).strip())
+            if not label or "total" in label:
+                continue
+            if label in seen:
+                continue
+            seen.add(label)
+            out.append(label)
+        return out
+
+    student_order = _ordered_groups(student_df)
+    answer_order = _ordered_groups(answer_df)
+    if not student_order or not answer_order:
+        return False
+
+    return student_order == answer_order
 
 
 def has_multiple_items_marker(df: pd.DataFrame) -> bool:

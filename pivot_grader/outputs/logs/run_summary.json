@@ -1,25 +1,14 @@
 {
-  "timestamp_utc": "2026-03-18T20:31:52.251297+00:00",
+  "timestamp_utc": "2026-03-21T19:57:39.010941+00:00",
   "assignment": "Homework 3 - Pivot Tables",
   "max_score": 10,
   "students": [
     {
       "student_id": "asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM",
-      "status": "needs_review",
-      "total_score": 0,
-      "grade_file": "outputs/grades/asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM_grade.xlsx",
-      "needs_review_questions": [
-        "Q1",
-        "Q10",
-        "Q2",
-        "Q3",
-        "Q4",
-        "Q5",
-        "Q6",
-        "Q7",
-        "Q8",
-        "Q9"
-      ]
+      "status": "success",
+      "total_score": 8.0,
+      "grade_file": "/workspaces/Pivot-Table-Grading-Automator/pivot_grader/outputs/grades/asamoahemmanuel_1285342_18790702_EAsamoah- GryzzlSales2024_WM_grade.xlsx",
+      "needs_review_questions": []
     }
   ],
   "success_count": 1,
